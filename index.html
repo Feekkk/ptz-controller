@@ -461,7 +461,7 @@
         <div class="empty" id="empty">
           <div>
             <h2>Camera is off</h2>
-            <p>Plug in the EMEET PIXY, then start it from Chrome or Edge. Serve this folder so the page is on localhost. A file opened from disk cannot reach the camera.</p>
+            <p id="empty-copy">Plug in the EMEET PIXY, then start it from Chrome or Edge. Serve this folder so the page is on localhost or https. A file opened from disk cannot reach the camera.</p>
             <p><code>python3 -m http.server 8080</code></p>
           </div>
         </div>
@@ -494,7 +494,7 @@
             <option value="720p30">720p · 30 fps</option>
           </select>
         </label>
-        <p class="note" id="zoom-note" hidden>Digital zoom on the PIXY stays locked at 4K and at 1080p 60.</p>
+        <p class="note" id="zoom-note" hidden>Digital zoom on the PIXY stays locked at 4K and at 1080p 60, so the zoom controls are disabled in these modes.</p>
       </section>
 
       <section>
@@ -534,6 +534,11 @@
           <b id="blur-val">18</b>
         </label>
         <div class="templates" id="templates"></div>
+      </section>
+
+      <section>
+        <h2 class="kicker">Limits</h2>
+        <p class="note">The browser can drive UVC pan, tilt, and zoom only. AI tracking, privacy mode, and gesture control need EMEET Studio and are not available from this page.</p>
       </section>
 
       <button type="button" class="shutter" id="snap" disabled>Snap photo</button>
@@ -690,10 +695,21 @@ function controllable(cap) {
   return Boolean(cap) && cap.max - cap.min > (Number(cap.step) || 0);
 }
 
+function isChromium() {
+  if (navigator.userAgentData?.brands) {
+    return navigator.userAgentData.brands.some((item) => /chromium|google chrome|microsoft edge/i.test(item.brand));
+  }
+  return /chrome|chromium|edg\//i.test(navigator.userAgent) && !/opr\//i.test(navigator.userAgent);
+}
+
+function zoomLocked() {
+  return qualitySelect.value === "4k30" || qualitySelect.value === "1080p60";
+}
+
 function humanize(err) {
   if (err.name === "NotAllowedError") return "Camera permission was blocked. Allow the camera for this page and try again.";
   if (err.name === "NotFoundError") return "No camera was found. Plug in the PIXY and try again.";
-  if (err.name === "NotReadableError") return "The camera is busy in another app. Close that app and try again.";
+  if (err.name === "NotReadableError") return "Camera in use by another app. Close EMEET Studio, Zoom, or Teams and try again.";
   if (err.name === "SecurityError") return "This page is not allowed to use the camera. Open it from localhost or https.";
   return err.message || "Could not start the camera.";
 }
@@ -736,10 +752,11 @@ function renderPose() {
 
 function configureControls() {
   const live = Boolean(track);
+  const locked = zoomLocked();
   for (const axis of axes) {
     const cap = capability(axis);
     const slider = sliders[axis];
-    const ok = live && controllable(cap);
+    const ok = live && controllable(cap) && !(axis === "zoom" && locked);
     slider.disabled = !ok;
     if (ok) {
       slider.min = String(cap.min);
@@ -750,7 +767,7 @@ function configureControls() {
   document.querySelectorAll(".nudge, #home, #store").forEach((button) => {
     if (button.classList.contains("nudge")) {
       const axis = button.dataset.axis;
-      button.disabled = !(live && controllable(capability(axis)));
+      button.disabled = !(live && controllable(capability(axis))) || (axis === "zoom" && locked);
     } else {
       button.disabled = !live;
     }
@@ -758,8 +775,7 @@ function configureControls() {
   snapBtn.disabled = !live;
   deviceSelect.disabled = !live;
   renderPose();
-  const limited = qualitySelect.value === "4k30" || qualitySelect.value === "1080p60";
-  zoomNote.hidden = !limited;
+  zoomNote.hidden = !locked;
 }
 
 function queuePtz(partial) {
@@ -801,6 +817,7 @@ function offsetAxis(axis, delta) {
 }
 
 function stepAxis(axis, direction) {
+  if (axis === "zoom" && zoomLocked()) return;
   const cap = capability(axis);
   if (!controllable(cap)) return;
   const span = cap.max - cap.min;
@@ -1128,7 +1145,7 @@ async function openStream(deviceId) {
   }
   const caps = track.getCapabilities ? track.getCapabilities() : {};
   const hasPtz = axes.some((axis) => controllable(caps[axis]));
-  setStatus(hasPtz ? "" : "This browser did not expose pan, tilt, or zoom. Use Chrome or Edge, and close other apps using the PIXY.");
+  setStatus(hasPtz ? "" : "Camera opened but PTZ not exposed — use Chrome/Edge, close EMEET Studio/Zoom/Teams, replug USB.");
   if (!hasPtz) statusEl.classList.add("error");
   loop();
   renderPose();
@@ -1239,16 +1256,13 @@ power.addEventListener("click", () => {
     resolutionEl.textContent = "No signal";
     return;
   }
-  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-    setStatus("Open this page in Chrome or Edge at http://localhost. A file:// address cannot use the camera.", true);
-    return;
-  }
+  if (!secureEnough()) return;
   openStream(deviceSelect.value || "");
 });
 
 qualitySelect.addEventListener("change", () => {
   localStorage.setItem("pixy-e3138-quality", qualitySelect.value);
-  zoomNote.hidden = !(qualitySelect.value === "4k30" || qualitySelect.value === "1080p60");
+  configureControls();
   if (stream) openStream(deviceSelect.value || track?.getSettings().deviceId || "");
 });
 
@@ -1343,11 +1357,20 @@ window.addEventListener("keydown", (event) => {
   else if (event.code === "Space") { event.preventDefault(); snap(); }
 });
 
+function secureEnough() {
+  if (window.isSecureContext && navigator.mediaDevices?.getUserMedia) return true;
+  setStatus("Camera access is blocked outside a secure context. Serve this folder with python3 -m http.server 8080 and open http://localhost:8080, or use the GitHub Pages URL https://feekkk.github.io/ptz-script.github.io/. Opening the file from disk never works.", true);
+  return false;
+}
+
 renderTemplateButtons();
 renderPresets();
-zoomNote.hidden = !(qualitySelect.value === "4k30" || qualitySelect.value === "1080p60");
-if (!window.isSecureContext) {
-  setStatus("This page was opened as a file. Camera access stays blocked until you serve it, for example python3 -m http.server 8080, then open http://localhost:8080.", true);
+zoomNote.hidden = !zoomLocked();
+if (!secureEnough()) {
+  power.disabled = true;
+  $("empty-copy").textContent = "This page is not on localhost or https, so the browser blocks the camera. Serve the folder locally or open the GitHub Pages URL.";
+} else if (!isChromium()) {
+  setStatus("This browser may not expose pan, tilt, or zoom. Use Chrome or Edge for full PTZ control.");
 }
 </script>
 </body>
