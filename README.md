@@ -4,7 +4,7 @@ A single-page remote control for the EMEET PIXY E3138 webcam. It drives UVC pan,
 
 ## Live site
 
-https://feekkk.github.io/ptz-script.github.io/
+https://feekkk.github.io/ptz-controller/
 
 Deployed automatically to GitHub Pages on every push to `main` via `.github/workflows/pages.yml`. The HTTPS URL satisfies the secure-context requirement for camera access.
 
