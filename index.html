@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIXY E3138</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e0e0c;
+    --panel: #171714;
+    --inset: #10100e;
+    --line: rgba(244, 236, 220, 0.12);
+    --text: #f3efe6;
+    --muted: #9c978c;
+    --accent: #e2a23a;
+    --accent-ink: #1c1406;
+    --danger: #e36a58;
+    --shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 "Avenir Next", "Segoe UI", sans-serif;
+  }
+
+  button, select, input { font: inherit; color: inherit; }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled, select:disabled, input:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  button:focus-visible, select:focus-visible, input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .app {
+    width: min(1180px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 22px 0 40px;
+  }
+
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .mark {
+    width: 36px;
+    height: 36px;
+    border: 1.5px solid var(--text);
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+  }
+
+  .mark i {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(226, 162, 58, 0.2);
+  }
+
+  .brand h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+  }
+
+  .brand p {
+    margin: 1px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .start {
+    border: 0;
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-radius: 999px;
+    padding: 10px 18px;
+    font-weight: 650;
+  }
+
+  .start[data-live="true"] {
+    background: transparent;
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 332px;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .stage, .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .stage { padding: 12px; }
+
+  .frame {
+    position: relative;
+    background: var(--inset);
+    border-radius: 12px;
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    touch-action: none;
+  }
+
+  .frame canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    background: #050505;
+  }
+
+  .frame.is-ptz { cursor: grab; }
+  .frame.is-ptz:active { cursor: grabbing; }
+
+  .empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 28px;
+    text-align: center;
+  }
+
+  .empty h2 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+
+  .empty p {
+    margin: 0 auto;
+    max-width: 46ch;
+    color: var(--muted);
+  }
+
+  .empty code {
+    color: var(--text);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px;
+  }
+
+  .flash {
+    position: absolute;
+    inset: 0;
+    background: white;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .flash.go { animation: pop 180ms ease-out; }
+
+  @keyframes pop {
+    from { opacity: 0.9; }
+    to { opacity: 0; }
+  }
+
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 10px 4px 0;
+    color: var(--muted);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px;
+  }
+
+  .shots {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 2px 2px;
+  }
+
+  .shots:empty { display: none; }
+
+  .shots a {
+    flex: 0 0 auto;
+    width: 96px;
+    height: 54px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+
+  .shots img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .panel {
+    padding: 16px;
+    display: grid;
+    gap: 18px;
+    align-content: start;
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 96px);
+    overflow: auto;
+  }
+
+  .kicker {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  label.field {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  label.field span, .slider-row span {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  select, input[type="range"] { width: 100%; }
+
+  select {
+    background: var(--inset);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 10px;
+  }
+
+  .note {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .pad {
+    display: grid;
+    grid-template-columns: 64px 64px 64px;
+    grid-template-areas:
+      ". up ."
+      "left home right"
+      ". down .";
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .pad button {
+    height: 64px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: var(--inset);
+    font-size: 20px;
+  }
+
+  .pad button:active:not(:disabled) { background: #2a2822; }
+
+  .up { grid-area: up; }
+  .left { grid-area: left; }
+  .home { grid-area: home; background: #241f16; color: var(--accent); }
+  .right { grid-area: right; }
+  .down { grid-area: down; }
+
+  .slider-row {
+    display: grid;
+    grid-template-columns: 42px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    margin-top: 6px;
+  }
+
+  .slider-row b {
+    font-weight: 550;
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px;
+  }
+
+  .zoom-keys {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .zoom-keys button, .presets button, .modes button, .store {
+    border: 1px solid var(--line);
+    background: var(--inset);
+    border-radius: 10px;
+    padding: 9px 10px;
+  }
+
+  .presets {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .presets button[aria-pressed="true"], .modes button[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: transparent;
+  }
+
+  .presets button.filled { box-shadow: inset 0 -2px 0 var(--accent); }
+  .presets button[aria-pressed="true"].filled { box-shadow: none; }
+
+  .modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .templates {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .templates button {
+    padding: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--inset);
+    position: relative;
+  }
+
+  .templates button[aria-pressed="true"] {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  .templates canvas, .templates .upload {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    display: block;
+  }
+
+  .templates .upload {
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+    font-size: 12px;
+    min-height: 48px;
+  }
+
+  .templates small {
+    position: absolute;
+    left: 6px;
+    bottom: 4px;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  }
+
+  .shutter {
+    width: 100%;
+    border: 0;
+    border-radius: 14px;
+    padding: 14px 16px;
+    background: var(--text);
+    color: #16140f;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .shutter:active:not(:disabled) { transform: translateY(1px); }
+
+  .status {
+    margin: 12px 0 0;
+    min-height: 1.2em;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .status.error { color: var(--danger); }
+
+  .keys {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .source {
+    position: fixed;
+    width: 2px;
+    height: 2px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    header { align-items: center; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flash.go { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <span class="mark" aria-hidden="true"><i></i></span>
+      <div>
+        <h1>PIXY</h1>
+        <p>E3138</p>
+      </div>
+    </div>
+    <button type="button" class="start" id="power">Start camera</button>
+  </header>
+
+  <div class="layout">
+    <section class="stage">
+      <div class="frame" id="frame">
+        <canvas id="view" width="1920" height="1080"></canvas>
+        <div class="empty" id="empty">
+          <div>
+            <h2>Camera is off</h2>
+            <p>Plug in the EMEET PIXY, then start it from Chrome or Edge. Serve this folder so the page is on localhost. A file opened from disk cannot reach the camera.</p>
+            <p><code>python3 -m http.server 8080</code></p>
+          </div>
+        </div>
+        <div class="flash" id="flash"></div>
+      </div>
+      <div class="meta">
+        <span id="resolution">No signal</span>
+        <span id="pose">Pan — · Tilt — · Zoom —</span>
+      </div>
+      <div class="shots" id="shots"></div>
+    </section>
+
+    <aside class="panel">
+      <section>
+        <h2 class="kicker">Camera</h2>
+        <label class="field">
+          <span>Device</span>
+          <select id="device" disabled>
+            <option value="">Default camera</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Quality</span>
+          <select id="quality">
+            <option value="4k30">4K · 30 fps</option>
+            <option value="1440p30">1440p · 30 fps</option>
+            <option value="1080p60">1080p · 60 fps</option>
+            <option value="1080p30" selected>1080p · 30 fps</option>
+            <option value="720p60">720p · 60 fps</option>
+            <option value="720p30">720p · 30 fps</option>
+          </select>
+        </label>
+        <p class="note" id="zoom-note" hidden>Digital zoom on the PIXY stays locked at 4K and at 1080p 60.</p>
+      </section>
+
+      <section>
+        <h2 class="kicker">Position</h2>
+        <div class="pad">
+          <button type="button" class="up nudge" data-axis="tilt" data-dir="1" aria-label="Tilt up" disabled>↑</button>
+          <button type="button" class="left nudge" data-axis="pan" data-dir="-1" aria-label="Pan left" disabled>←</button>
+          <button type="button" class="home" id="home" aria-label="Center camera" disabled>●</button>
+          <button type="button" class="right nudge" data-axis="pan" data-dir="1" aria-label="Pan right" disabled>→</button>
+          <button type="button" class="down nudge" data-axis="tilt" data-dir="-1" aria-label="Tilt down" disabled>↓</button>
+        </div>
+        <label class="slider-row"><span>Pan</span><input id="pan" type="range" disabled><b id="pan-val">—</b></label>
+        <label class="slider-row"><span>Tilt</span><input id="tilt" type="range" disabled><b id="tilt-val">—</b></label>
+        <label class="slider-row"><span>Zoom</span><input id="zoom" type="range" disabled><b id="zoom-val">—</b></label>
+        <div class="zoom-keys">
+          <button type="button" class="nudge" data-axis="zoom" data-dir="-1" disabled>Zoom out</button>
+          <button type="button" class="nudge" data-axis="zoom" data-dir="1" disabled>Zoom in</button>
+        </div>
+        <div class="presets" id="preset-row">
+          <button type="button" data-slot="0" aria-pressed="true">1</button>
+          <button type="button" data-slot="1" aria-pressed="false">2</button>
+          <button type="button" data-slot="2" aria-pressed="false">3</button>
+          <button type="button" class="store" id="store" disabled>Store</button>
+        </div>
+        <p class="keys">Arrows move. − and + zoom. Home centers. 1–3 recall. Space snaps. Drag the picture to pan and tilt.</p>
+      </section>
+
+      <section>
+        <h2 class="kicker">Picture</h2>
+        <div class="modes">
+          <button type="button" id="mode-live" aria-pressed="true">Live</button>
+          <button type="button" id="mode-bokeh" aria-pressed="false">Bokeh</button>
+        </div>
+        <label class="slider-row" id="blur-row" hidden>
+          <span>Blur</span>
+          <input id="blur" type="range" min="8" max="40" value="18">
+          <b id="blur-val">18</b>
+        </label>
+        <div class="templates" id="templates"></div>
+      </section>
+
+      <button type="button" class="shutter" id="snap" disabled>Snap photo</button>
+    </aside>
+  </div>
+  <p class="status" id="status" role="status"></p>
+</div>
+<video class="source" id="camera" playsinline autoplay muted></video>
+<input id="file" type="file" accept="image/*" hidden>
+
+<script>
+const qualities = {
+  "4k30": { width: 3840, height: 2160, frameRate: 30 },
+  "1440p30": { width: 2560, height: 1440, frameRate: 30 },
+  "1080p60": { width: 1920, height: 1080, frameRate: 60 },
+  "1080p30": { width: 1920, height: 1080, frameRate: 30 },
+  "720p60": { width: 1280, height: 720, frameRate: 60 },
+  "720p30": { width: 1280, height: 720, frameRate: 30 }
+};
+
+const paints = {
+  porcelain(ctx, w, h) {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, "#f6f1e8");
+    g.addColorStop(1, "#e3d3c0");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    const r = ctx.createRadialGradient(w * 0.5, h * 0.32, 10, w * 0.5, h * 0.4, w * 0.65);
+    r.addColorStop(0, "rgba(255,255,255,0.7)");
+    r.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = r;
+    ctx.fillRect(0, 0, w, h);
+  },
+  slate(ctx, w, h) {
+    const g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, "#d7dbe2");
+    g.addColorStop(0.55, "#b4bac4");
+    g.addColorStop(1, "#8d939e");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  },
+  spotlight(ctx, w, h) {
+    ctx.fillStyle = "#121418";
+    ctx.fillRect(0, 0, w, h);
+    const r = ctx.createRadialGradient(w * 0.5, h * 0.42, w * 0.06, w * 0.5, h * 0.5, w * 0.62);
+    r.addColorStop(0, "#4a5362");
+    r.addColorStop(1, "#101216");
+    ctx.fillStyle = r;
+    ctx.fillRect(0, 0, w, h);
+  },
+  dawn(ctx, w, h) {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, "#f2c3a0");
+    g.addColorStop(0.42, "#f6e4d2");
+    g.addColorStop(1, "#8eafc4");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  },
+  harbor(ctx, w, h) {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, "#8fc9cf");
+    g.addColorStop(0.5, "#d5ebe7");
+    g.addColorStop(1, "#efe4d2");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  },
+  grove(ctx, w, h) {
+    const g = ctx.createLinearGradient(0, h, w, 0);
+    g.addColorStop(0, "#243128");
+    g.addColorStop(1, "#6d7f5e");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+};
+
+const templateList = [
+  ["porcelain", "Studio"],
+  ["slate", "Slate"],
+  ["spotlight", "Spot"],
+  ["dawn", "Dawn"],
+  ["harbor", "Harbor"],
+  ["grove", "Grove"]
+];
+
+const $ = (id) => document.getElementById(id);
+const power = $("power");
+const deviceSelect = $("device");
+const qualitySelect = $("quality");
+const view = $("view");
+const frame = $("frame");
+const empty = $("empty");
+const camera = $("camera");
+const statusEl = $("status");
+const resolutionEl = $("resolution");
+const poseEl = $("pose");
+const snapBtn = $("snap");
+const flashEl = $("flash");
+const shots = $("shots");
+const zoomNote = $("zoom-note");
+const blurRow = $("blur-row");
+const blurInput = $("blur");
+const blurVal = $("blur-val");
+const fileInput = $("file");
+const ctx = view.getContext("2d", { alpha: false });
+const person = document.createElement("canvas");
+const personCtx = person.getContext("2d");
+const feather = document.createElement("canvas");
+const featherCtx = feather.getContext("2d");
+const blurLayer = document.createElement("canvas");
+const blurCtx = blurLayer.getContext("2d");
+
+const axes = ["pan", "tilt", "zoom"];
+const sliders = { pan: $("pan"), tilt: $("tilt"), zoom: $("zoom") };
+const readouts = { pan: $("pan-val"), tilt: $("tilt-val"), zoom: $("zoom-val") };
+
+let stream = null;
+let track = null;
+let raf = 0;
+let sending = false;
+let fillingDevices = false;
+let bgMode = "live";
+let templateId = null;
+let customImage = null;
+let segmenterPromise = null;
+let segmenter = null;
+let pending = null;
+let pumping = false;
+let activePreset = 0;
+const target = { pan: null, tilt: null, zoom: null };
+let presets = [null, null, null];
+
+try {
+  const savedQuality = localStorage.getItem("pixy-e3138-quality");
+  if (savedQuality && qualities[savedQuality]) qualitySelect.value = savedQuality;
+  const savedPresets = JSON.parse(localStorage.getItem("pixy-e3138-presets") || "null");
+  if (Array.isArray(savedPresets) && savedPresets.length === 3) presets = savedPresets;
+} catch (err) {}
+
+function setStatus(message, isError) {
+  statusEl.textContent = message || "";
+  statusEl.classList.toggle("error", Boolean(isError && message));
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function capability(axis) {
+  if (!track || typeof track.getCapabilities !== "function") return null;
+  return track.getCapabilities()[axis] || null;
+}
+
+function controllable(cap) {
+  return Boolean(cap) && cap.max - cap.min > (Number(cap.step) || 0);
+}
+
+function humanize(err) {
+  if (err.name === "NotAllowedError") return "Camera permission was blocked. Allow the camera for this page and try again.";
+  if (err.name === "NotFoundError") return "No camera was found. Plug in the PIXY and try again.";
+  if (err.name === "NotReadableError") return "The camera is busy in another app. Close that app and try again.";
+  if (err.name === "SecurityError") return "This page is not allowed to use the camera. Open it from localhost or https.";
+  return err.message || "Could not start the camera.";
+}
+
+function formatAxis(axis, value, cap) {
+  if (value == null || Number.isNaN(value)) return "—";
+  if (axis === "zoom") {
+    if (cap && cap.max <= 20) return `${Number(value).toFixed(2)}×`;
+    return `${Math.round(value)}`;
+  }
+  if (!cap || (Math.abs(cap.max) <= 360 && Math.abs(cap.min) <= 360)) return `${Math.round(value)}°`;
+  return `${Math.round(value)}`;
+}
+
+function syncTargetFromTrack() {
+  if (!track) return;
+  const settings = track.getSettings();
+  for (const axis of axes) {
+    if (settings[axis] != null) target[axis] = settings[axis];
+  }
+}
+
+function renderPose() {
+  const caps = {};
+  for (const axis of axes) caps[axis] = capability(axis);
+  for (const axis of axes) {
+    const cap = caps[axis];
+    const slider = sliders[axis];
+    const value = target[axis];
+    if (document.activeElement !== slider && value != null && !slider.disabled) slider.value = String(value);
+    readouts[axis].textContent = formatAxis(axis, value, cap);
+  }
+  const settings = track ? track.getSettings() : {};
+  const fps = settings.frameRate ? Math.round(settings.frameRate) : "–";
+  resolutionEl.textContent = settings.width ? `${settings.width}×${settings.height} · ${fps} fps` : "No signal";
+  poseEl.textContent = `Pan ${formatAxis("pan", target.pan, caps.pan)} · Tilt ${formatAxis("tilt", target.tilt, caps.tilt)} · Zoom ${formatAxis("zoom", target.zoom, caps.zoom)}`;
+  const ptz = axes.some((axis) => controllable(caps[axis]));
+  frame.classList.toggle("is-ptz", Boolean(track) && ptz);
+}
+
+function configureControls() {
+  const live = Boolean(track);
+  for (const axis of axes) {
+    const cap = capability(axis);
+    const slider = sliders[axis];
+    const ok = live && controllable(cap);
+    slider.disabled = !ok;
+    if (ok) {
+      slider.min = String(cap.min);
+      slider.max = String(cap.max);
+      slider.step = cap.step ? String(cap.step) : "any";
+    }
+  }
+  document.querySelectorAll(".nudge, #home, #store").forEach((button) => {
+    if (button.classList.contains("nudge")) {
+      const axis = button.dataset.axis;
+      button.disabled = !(live && controllable(capability(axis)));
+    } else {
+      button.disabled = !live;
+    }
+  });
+  snapBtn.disabled = !live;
+  deviceSelect.disabled = !live;
+  renderPose();
+  const limited = qualitySelect.value === "4k30" || qualitySelect.value === "1080p60";
+  zoomNote.hidden = !limited;
+}
+
+function queuePtz(partial) {
+  pending = Object.assign(pending || {}, partial);
+  if (!pumping) pump();
+}
+
+async function pump() {
+  pumping = true;
+  while (pending && track) {
+    const job = pending;
+    pending = null;
+    const advanced = {};
+    for (const axis of axes) {
+      const cap = capability(axis);
+      if (job[axis] == null || !controllable(cap)) continue;
+      advanced[axis] = clamp(Number(job[axis]), cap.min, cap.max);
+    }
+    if (!Object.keys(advanced).length) continue;
+    try {
+      await track.applyConstraints({ advanced: [advanced] });
+    } catch (err) {
+      setStatus(err.message || "The camera rejected that position.", true);
+      syncTargetFromTrack();
+    }
+    if (!pending) syncTargetFromTrack();
+    renderPose();
+  }
+  pumping = false;
+}
+
+function offsetAxis(axis, delta) {
+  const cap = capability(axis);
+  if (!controllable(cap)) return;
+  if (target[axis] == null) target[axis] = track.getSettings()[axis] ?? cap.min;
+  target[axis] = clamp(target[axis] + delta, cap.min, cap.max);
+  queuePtz({ [axis]: target[axis] });
+  renderPose();
+}
+
+function stepAxis(axis, direction) {
+  const cap = capability(axis);
+  if (!controllable(cap)) return;
+  const span = cap.max - cap.min;
+  const step = Math.max(Number(cap.step) || 0, span / 28);
+  offsetAxis(axis, step * direction);
+}
+
+function centerCamera() {
+  const next = {};
+  for (const axis of ["pan", "tilt"]) {
+    const cap = capability(axis);
+    if (!controllable(cap)) continue;
+    const home = clamp(0, cap.min, cap.max);
+    target[axis] = home;
+    next[axis] = home;
+  }
+  const zoom = capability("zoom");
+  if (controllable(zoom)) {
+    target.zoom = zoom.min;
+    next.zoom = zoom.min;
+  }
+  queuePtz(next);
+  renderPose();
+}
+
+function renderPresets() {
+  document.querySelectorAll("#preset-row [data-slot]").forEach((button) => {
+    const slot = Number(button.dataset.slot);
+    button.setAttribute("aria-pressed", slot === activePreset ? "true" : "false");
+    button.classList.toggle("filled", Boolean(presets[slot]));
+  });
+}
+
+function recallPreset(slot) {
+  activePreset = slot;
+  const pose = presets[slot];
+  renderPresets();
+  if (!pose || !track) return;
+  const next = {};
+  for (const axis of axes) {
+    const cap = capability(axis);
+    if (pose[axis] == null || !controllable(cap)) continue;
+    target[axis] = clamp(pose[axis], cap.min, cap.max);
+    next[axis] = target[axis];
+  }
+  queuePtz(next);
+  renderPose();
+}
+
+function storePreset() {
+  if (!track) return;
+  presets[activePreset] = { pan: target.pan, tilt: target.tilt, zoom: target.zoom };
+  localStorage.setItem("pixy-e3138-presets", JSON.stringify(presets));
+  renderPresets();
+  setStatus(`Stored position ${activePreset + 1}.`);
+}
+
+function hold(button, fn) {
+  let timer = 0;
+  const stop = () => {
+    window.clearInterval(timer);
+    timer = 0;
+  };
+  button.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || button.disabled) return;
+    event.preventDefault();
+    fn();
+    timer = window.setInterval(fn, 130);
+  });
+  button.addEventListener("pointerup", stop);
+  button.addEventListener("pointercancel", stop);
+}
+
+function drawCover(context, image, w, h) {
+  const imageRatio = image.width / image.height;
+  const frameRatio = w / h;
+  let dw;
+  let dh;
+  let dx;
+  let dy;
+  if (imageRatio > frameRatio) {
+    dh = h;
+    dw = h * imageRatio;
+    dx = (w - dw) / 2;
+    dy = 0;
+  } else {
+    dw = w;
+    dh = w / imageRatio;
+    dx = 0;
+    dy = (h - dh) / 2;
+  }
+  context.drawImage(image, dx, dy, dw, dh);
+}
+
+function paintTemplate(context, w, h) {
+  if (templateId === "custom" && customImage) {
+    drawCover(context, customImage, w, h);
+    return;
+  }
+  if (paints[templateId]) paints[templateId](context, w, h);
+}
+
+function fitCanvases() {
+  const w = camera.videoWidth;
+  const h = camera.videoHeight;
+  if (!w || !h) return;
+  if (view.width === w && view.height === h) return;
+  view.width = w;
+  view.height = h;
+  person.width = w;
+  person.height = h;
+  feather.width = w;
+  feather.height = h;
+  blurLayer.width = Math.max(160, Math.round(w / 4));
+  blurLayer.height = Math.max(90, Math.round(h / 4));
+}
+
+function drawLive() {
+  fitCanvases();
+  if (!camera.videoWidth) return;
+  ctx.drawImage(camera, 0, 0, view.width, view.height);
+}
+
+function paintComposite(results) {
+  if (bgMode === "live") return;
+  fitCanvases();
+  const w = view.width;
+  const h = view.height;
+  ctx.clearRect(0, 0, w, h);
+  if (bgMode === "bokeh") {
+    const amount = Math.max(1.5, Number(blurInput.value) / 4);
+    blurCtx.filter = `blur(${amount}px)`;
+    blurCtx.drawImage(results.image, 0, 0, blurLayer.width, blurLayer.height);
+    blurCtx.filter = "none";
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(blurLayer, 0, 0, w, h);
+  } else {
+    paintTemplate(ctx, w, h);
+  }
+  personCtx.globalCompositeOperation = "source-over";
+  personCtx.clearRect(0, 0, w, h);
+  personCtx.drawImage(results.image, 0, 0, w, h);
+  featherCtx.clearRect(0, 0, w, h);
+  featherCtx.filter = `blur(${Math.max(3, w / 320)}px)`;
+  featherCtx.drawImage(results.segmentationMask, 0, 0, w, h);
+  featherCtx.filter = "none";
+  personCtx.globalCompositeOperation = "destination-in";
+  personCtx.drawImage(feather, 0, 0);
+  personCtx.globalCompositeOperation = "source-over";
+  ctx.drawImage(person, 0, 0);
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.crossOrigin = "anonymous";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Portrait model failed to download."));
+    document.head.appendChild(script);
+  });
+}
+
+function ensureSegmenter() {
+  if (!segmenterPromise) {
+    segmenterPromise = (async () => {
+      try {
+        if (!window.SelfieSegmentation) {
+          await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/selfie_segmentation.js");
+        }
+        const created = new SelfieSegmentation({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/${file}`
+        });
+        created.setOptions({ modelSelection: 1, selfieMode: false });
+        created.onResults(paintComposite);
+        segmenter = created;
+        return created;
+      } catch (err) {
+        segmenterPromise = null;
+        throw err;
+      }
+    })();
+  }
+  return segmenterPromise;
+}
+
+function loop() {
+  raf = requestAnimationFrame(loop);
+  if (camera.readyState < 2) return;
+  if (bgMode === "live" || !segmenter) {
+    drawLive();
+    return;
+  }
+  if (sending) return;
+  sending = true;
+  segmenter.send({ image: camera }).catch((err) => {
+    setStatus(err.message || "Background separation stopped.", true);
+  }).finally(() => {
+    sending = false;
+  });
+}
+
+function stopStream() {
+  cancelAnimationFrame(raf);
+  raf = 0;
+  if (stream) stream.getTracks().forEach((item) => item.stop());
+  stream = null;
+  track = null;
+  camera.srcObject = null;
+  empty.hidden = false;
+  power.textContent = "Start camera";
+  power.dataset.live = "false";
+  configureControls();
+}
+
+async function getCameraStream(deviceId) {
+  const quality = qualities[qualitySelect.value];
+  const video = {
+    width: { ideal: quality.width },
+    height: { ideal: quality.height },
+    frameRate: { ideal: quality.frameRate }
+  };
+  if (deviceId) video.deviceId = { exact: deviceId };
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { ...video, pan: true, tilt: true, zoom: true }
+    });
+  } catch (err) {
+    if (err.name !== "OverconstrainedError" && err.name !== "ConstraintNotSatisfiedError") throw err;
+    return navigator.mediaDevices.getUserMedia({ audio: false, video });
+  }
+}
+
+async function refreshDevices() {
+  const devices = (await navigator.mediaDevices.enumerateDevices()).filter((item) => item.kind === "videoinput");
+  const current = track ? track.getSettings().deviceId || "" : "";
+  fillingDevices = true;
+  deviceSelect.replaceChildren();
+  if (!devices.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Default camera";
+    deviceSelect.append(option);
+  }
+  for (const item of devices) {
+    const option = document.createElement("option");
+    option.value = item.deviceId;
+    option.textContent = item.label || "Camera";
+    deviceSelect.append(option);
+  }
+  if (current) deviceSelect.value = current;
+  fillingDevices = false;
+  return devices;
+}
+
+function waitForPicture() {
+  if (camera.videoWidth) return Promise.resolve();
+  return new Promise((resolve) => {
+    camera.addEventListener("loadedmetadata", () => resolve(), { once: true });
+  });
+}
+
+async function openStream(deviceId) {
+  const pose = track ? { pan: target.pan, tilt: target.tilt, zoom: target.zoom } : null;
+  const previous = stream;
+  track = null;
+  stream = null;
+  cancelAnimationFrame(raf);
+  if (previous) previous.getTracks().forEach((item) => item.stop());
+  setStatus("Opening the PIXY…");
+  try {
+    stream = await getCameraStream(deviceId);
+  } catch (err) {
+    stream = null;
+    track = null;
+    empty.hidden = false;
+    power.textContent = "Start camera";
+    power.dataset.live = "false";
+    configureControls();
+    setStatus(humanize(err), true);
+    return;
+  }
+  camera.srcObject = stream;
+  await camera.play();
+  await waitForPicture();
+  track = stream.getVideoTracks()[0];
+  const active = track;
+  active.addEventListener("ended", () => {
+    if (track !== active) return;
+    stopStream();
+    setStatus("The camera disconnected.", true);
+  });
+  empty.hidden = true;
+  power.textContent = "Stop camera";
+  power.dataset.live = "true";
+  syncTargetFromTrack();
+  configureControls();
+  const devices = await refreshDevices();
+  if (!deviceId) {
+    const current = track.getSettings().deviceId;
+    const pixy = devices.find((item) => /pixy|e3138|emeet/i.test(item.label || ""));
+    if (pixy && pixy.deviceId && pixy.deviceId !== current) {
+      await openStream(pixy.deviceId);
+      return;
+    }
+  }
+  if (pose) {
+    for (const axis of axes) {
+      const cap = capability(axis);
+      if (pose[axis] == null || !controllable(cap)) continue;
+      target[axis] = clamp(pose[axis], cap.min, cap.max);
+    }
+    queuePtz({ pan: target.pan, tilt: target.tilt, zoom: target.zoom });
+  }
+  if (bgMode !== "live") {
+    try {
+      await ensureSegmenter();
+    } catch (err) {
+      bgMode = "live";
+      templateId = null;
+      syncPicture();
+      setStatus(err.message, true);
+    }
+  }
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  const hasPtz = axes.some((axis) => controllable(caps[axis]));
+  setStatus(hasPtz ? "" : "This browser did not expose pan, tilt, or zoom. Use Chrome or Edge, and close other apps using the PIXY.");
+  if (!hasPtz) statusEl.classList.add("error");
+  loop();
+  renderPose();
+}
+
+function syncPicture() {
+  $("mode-live").setAttribute("aria-pressed", bgMode === "live" ? "true" : "false");
+  $("mode-bokeh").setAttribute("aria-pressed", bgMode === "bokeh" ? "true" : "false");
+  blurRow.hidden = bgMode !== "bokeh";
+  document.querySelectorAll("#templates button").forEach((button) => {
+    const on = bgMode === "template" && button.dataset.template === templateId;
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+
+async function setPicture(mode, nextTemplate) {
+  if (mode !== "live") {
+    setStatus("Loading portrait separation…");
+    try {
+      await ensureSegmenter();
+      setStatus("");
+    } catch (err) {
+      setStatus(err.message, true);
+      return;
+    }
+  }
+  bgMode = mode;
+  templateId = mode === "template" ? nextTemplate : null;
+  syncPicture();
+}
+
+function renderTemplateButtons() {
+  const root = $("templates");
+  root.replaceChildren();
+  for (const [id, name] of templateList) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.template = id;
+    button.setAttribute("aria-pressed", "false");
+    button.setAttribute("aria-label", `${name} background`);
+    const thumb = document.createElement("canvas");
+    thumb.width = 160;
+    thumb.height = 90;
+    paints[id](thumb.getContext("2d"), 160, 90);
+    const caption = document.createElement("small");
+    caption.textContent = name;
+    button.append(thumb, caption);
+    button.addEventListener("click", () => setPicture("template", id));
+    root.append(button);
+  }
+  const upload = document.createElement("button");
+  upload.type = "button";
+  upload.dataset.template = "custom";
+  upload.setAttribute("aria-pressed", "false");
+  upload.setAttribute("aria-label", "Upload background");
+  const face = document.createElement("div");
+  face.className = "upload";
+  face.id = "upload-face";
+  face.textContent = "Upload";
+  const caption = document.createElement("small");
+  caption.textContent = "Custom";
+  upload.append(face, caption);
+  upload.addEventListener("click", () => {
+    if (customImage) setPicture("template", "custom");
+    else fileInput.click();
+  });
+  root.append(upload);
+}
+
+function stamp() {
+  const date = new Date();
+  const part = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${part(date.getMonth() + 1)}${part(date.getDate())}-${part(date.getHours())}${part(date.getMinutes())}${part(date.getSeconds())}`;
+}
+
+function snap() {
+  if (!track || !camera.videoWidth) return;
+  if (bgMode === "live" || !segmenter) drawLive();
+  flashEl.classList.remove("go");
+  void flashEl.offsetWidth;
+  flashEl.classList.add("go");
+  view.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const name = `PIXY-E3138-${stamp()}.jpg`;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    const image = document.createElement("img");
+    image.src = url;
+    image.alt = name;
+    link.append(image);
+    shots.prepend(link);
+    while (shots.children.length > 8) {
+      const last = shots.lastElementChild;
+      URL.revokeObjectURL(last.href);
+      last.remove();
+    }
+    link.click();
+    setStatus(`Saved ${name}`);
+  }, "image/jpeg", 0.92);
+}
+
+power.addEventListener("click", () => {
+  if (stream) {
+    stopStream();
+    setStatus("");
+    resolutionEl.textContent = "No signal";
+    return;
+  }
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    setStatus("Open this page in Chrome or Edge at http://localhost. A file:// address cannot use the camera.", true);
+    return;
+  }
+  openStream(deviceSelect.value || "");
+});
+
+qualitySelect.addEventListener("change", () => {
+  localStorage.setItem("pixy-e3138-quality", qualitySelect.value);
+  zoomNote.hidden = !(qualitySelect.value === "4k30" || qualitySelect.value === "1080p60");
+  if (stream) openStream(deviceSelect.value || track?.getSettings().deviceId || "");
+});
+
+deviceSelect.addEventListener("change", () => {
+  if (fillingDevices || !stream) return;
+  openStream(deviceSelect.value);
+});
+
+for (const axis of axes) {
+  sliders[axis].addEventListener("input", () => {
+    const cap = capability(axis);
+    if (!controllable(cap)) return;
+    target[axis] = clamp(Number(sliders[axis].value), cap.min, cap.max);
+    queuePtz({ [axis]: target[axis] });
+    renderPose();
+  });
+}
+
+document.querySelectorAll(".nudge").forEach((button) => {
+  hold(button, () => stepAxis(button.dataset.axis, Number(button.dataset.dir)));
+});
+
+$("home").addEventListener("click", centerCamera);
+$("store").addEventListener("click", storePreset);
+document.querySelectorAll("#preset-row [data-slot]").forEach((button) => {
+  button.addEventListener("click", () => recallPreset(Number(button.dataset.slot)));
+});
+
+$("mode-live").addEventListener("click", () => setPicture("live"));
+$("mode-bokeh").addEventListener("click", () => setPicture("bokeh"));
+blurInput.addEventListener("input", () => {
+  blurVal.textContent = blurInput.value;
+});
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+  const image = new Image();
+  image.onload = () => {
+    customImage = image;
+    const face = $("upload-face");
+    face.replaceChildren();
+    const thumb = document.createElement("canvas");
+    thumb.width = 160;
+    thumb.height = 90;
+    drawCover(thumb.getContext("2d"), image, 160, 90);
+    thumb.style.width = "100%";
+    thumb.style.height = "100%";
+    face.append(thumb);
+    setPicture("template", "custom");
+  };
+  image.src = URL.createObjectURL(file);
+  fileInput.value = "";
+});
+
+snapBtn.addEventListener("click", snap);
+
+let drag = null;
+frame.addEventListener("pointerdown", (event) => {
+  if (!frame.classList.contains("is-ptz") || event.button !== 0) return;
+  drag = { x: event.clientX, y: event.clientY };
+  frame.setPointerCapture(event.pointerId);
+});
+frame.addEventListener("pointermove", (event) => {
+  if (!drag || !track) return;
+  const rect = frame.getBoundingClientRect();
+  const dx = event.clientX - drag.x;
+  const dy = event.clientY - drag.y;
+  drag = { x: event.clientX, y: event.clientY };
+  const pan = capability("pan");
+  const tilt = capability("tilt");
+  if (controllable(pan)) offsetAxis("pan", dx * ((pan.max - pan.min) / rect.width));
+  if (controllable(tilt)) offsetAxis("tilt", -dy * ((tilt.max - tilt.min) / rect.height));
+});
+const endDrag = () => { drag = null; };
+frame.addEventListener("pointerup", endDrag);
+frame.addEventListener("pointercancel", endDrag);
+
+window.addEventListener("keydown", (event) => {
+  if (event.target.closest("input, select, textarea") || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (!track && event.code !== "Space") return;
+  if (event.code === "ArrowLeft") { event.preventDefault(); stepAxis("pan", -1); }
+  else if (event.code === "ArrowRight") { event.preventDefault(); stepAxis("pan", 1); }
+  else if (event.code === "ArrowUp") { event.preventDefault(); stepAxis("tilt", 1); }
+  else if (event.code === "ArrowDown") { event.preventDefault(); stepAxis("tilt", -1); }
+  else if (event.key === "-" || event.key === "_") { event.preventDefault(); stepAxis("zoom", -1); }
+  else if (event.key === "=" || event.key === "+") { event.preventDefault(); stepAxis("zoom", 1); }
+  else if (event.code === "Home") { event.preventDefault(); centerCamera(); }
+  else if (event.code === "Digit1") recallPreset(0);
+  else if (event.code === "Digit2") recallPreset(1);
+  else if (event.code === "Digit3") recallPreset(2);
+  else if (event.code === "Space") { event.preventDefault(); snap(); }
+});
+
+renderTemplateButtons();
+renderPresets();
+zoomNote.hidden = !(qualitySelect.value === "4k30" || qualitySelect.value === "1080p60");
+if (!window.isSecureContext) {
+  setStatus("This page was opened as a file. Camera access stays blocked until you serve it, for example python3 -m http.server 8080, then open http://localhost:8080.", true);
+}
+</script>
+</body>
+</html>
