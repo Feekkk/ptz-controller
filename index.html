@@ -1359,7 +1359,7 @@ window.addEventListener("keydown", (event) => {
 
 function secureEnough() {
   if (window.isSecureContext && navigator.mediaDevices?.getUserMedia) return true;
-  setStatus("Camera access is blocked outside a secure context. Serve this folder with python3 -m http.server 8080 and open http://localhost:8080, or use the GitHub Pages URL https://feekkk.github.io/ptz-script.github.io/. Opening the file from disk never works.", true);
+  setStatus("Camera access is blocked outside a secure context. Serve this folder with python3 -m http.server 8080 and open http://localhost:8080, or use the GitHub Pages URL https://feekkk.github.io/ptz-controller/. Opening the file from disk never works.", true);
   return false;
 }
 
