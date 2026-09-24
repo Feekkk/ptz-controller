@@ -468,8 +468,13 @@ function capability(axis) {
   return track.getCapabilities()[axis] || null;
 }
 
-function controllable(cap) {
-  return Boolean(cap) && cap.max - cap.min > (Number(cap.step) || 0);
+function axisAvailable(axis) {
+  if (!track) return false;
+  const settings = track.getSettings();
+  if (!(axis in settings)) return false;
+  const cap = capability(axis);
+  if (!cap || cap.min == null || cap.max == null) return true;
+  return cap.max - cap.min > (Number(cap.step) || 0);
 }
 
 function isChromium() {
@@ -481,6 +486,15 @@ function isChromium() {
 
 function zoomLocked() {
   return qualitySelect.value === "4k30" || qualitySelect.value === "1080p60";
+}
+
+async function ptzPermissionState() {
+  try {
+    const status = await navigator.permissions.query({ name: "camera", panTiltZoom: true });
+    return status.state;
+  } catch (err) {
+    return "unknown";
+  }
 }
 
 function humanize(err) {
@@ -523,7 +537,7 @@ function renderPose() {
   const fps = settings.frameRate ? Math.round(settings.frameRate) : "–";
   resolutionEl.textContent = settings.width ? `${settings.width}×${settings.height} · ${fps} fps` : "No signal";
   poseEl.textContent = `Pan ${formatAxis("pan", target.pan, caps.pan)} · Tilt ${formatAxis("tilt", target.tilt, caps.tilt)} · Zoom ${formatAxis("zoom", target.zoom, caps.zoom)}`;
-  const ptz = axes.some((axis) => controllable(caps[axis]));
+  const ptz = axes.some((axis) => axisAvailable(axis));
   frame.classList.toggle("is-ptz", Boolean(track) && ptz);
 }
 
@@ -533,9 +547,9 @@ function configureControls() {
   for (const axis of axes) {
     const cap = capability(axis);
     const slider = sliders[axis];
-    const ok = live && controllable(cap) && !(axis === "zoom" && locked);
+    const ok = live && axisAvailable(axis) && !(axis === "zoom" && locked);
     slider.disabled = !ok;
-    if (ok) {
+    if (ok && cap) {
       slider.min = String(cap.min);
       slider.max = String(cap.max);
       slider.step = cap.step ? String(cap.step) : "any";
@@ -544,7 +558,7 @@ function configureControls() {
   document.querySelectorAll(".nudge, #home").forEach((button) => {
     if (button.classList.contains("nudge")) {
       const axis = button.dataset.axis;
-      button.disabled = !(live && controllable(capability(axis))) || (axis === "zoom" && locked);
+      button.disabled = !(live && axisAvailable(axis)) || (axis === "zoom" && locked);
     } else {
       button.disabled = !live;
     }
@@ -567,7 +581,7 @@ async function pump() {
     const advanced = {};
     for (const axis of axes) {
       const cap = capability(axis);
-      if (job[axis] == null || !controllable(cap)) continue;
+      if (job[axis] == null || !axisAvailable(axis) || !cap) continue;
       advanced[axis] = clamp(Number(job[axis]), cap.min, cap.max);
     }
     if (!Object.keys(advanced).length) continue;
@@ -585,7 +599,7 @@ async function pump() {
 
 function offsetAxis(axis, delta) {
   const cap = capability(axis);
-  if (!controllable(cap)) return;
+  if (!axisAvailable(axis) || !cap) return;
   if (target[axis] == null) target[axis] = track.getSettings()[axis] ?? cap.min;
   target[axis] = clamp(target[axis] + delta, cap.min, cap.max);
   queuePtz({ [axis]: target[axis] });
@@ -595,7 +609,7 @@ function offsetAxis(axis, delta) {
 function stepAxis(axis, direction) {
   if (axis === "zoom" && zoomLocked()) return;
   const cap = capability(axis);
-  if (!controllable(cap)) return;
+  if (!axisAvailable(axis) || !cap) return;
   const span = cap.max - cap.min;
   const step = Math.max(Number(cap.step) || 0, span / 28);
   offsetAxis(axis, step * direction);
@@ -605,13 +619,13 @@ function centerCamera() {
   const next = {};
   for (const axis of ["pan", "tilt"]) {
     const cap = capability(axis);
-    if (!controllable(cap)) continue;
+    if (!axisAvailable(axis) || !cap) continue;
     const home = clamp(0, cap.min, cap.max);
     target[axis] = home;
     next[axis] = home;
   }
   const zoom = capability("zoom");
-  if (controllable(zoom) && !zoomLocked()) {
+  if (axisAvailable("zoom") && zoom && !zoomLocked()) {
     target.zoom = zoom.min;
     next.zoom = zoom.min;
   }
@@ -649,44 +663,46 @@ function stopStream() {
 async function getCameraStream(deviceId) {
   const quality = qualities[qualitySelect.value];
   const locked = zoomLocked();
-  const withDevice = (video) => {
-    if (deviceId) video.deviceId = { exact: deviceId };
-    return video;
-  };
+  const ptz = { pan: true, tilt: true, ...(locked ? {} : { zoom: true }) };
   const attempts = [
-    withDevice({
-      width: { ideal: quality.width },
-      height: { ideal: quality.height },
-      frameRate: { ideal: quality.frameRate },
-      pan: true,
-      tilt: true,
-      ...(locked ? {} : { zoom: true })
-    }),
-    withDevice({
-      width: { ideal: quality.width },
-      height: { ideal: quality.height },
-      pan: true,
-      tilt: true,
-      ...(locked ? {} : { zoom: true })
-    }),
-    withDevice({ pan: true, tilt: true, ...(locked ? {} : { zoom: true }) }),
-    withDevice({ pan: true, tilt: true }),
-    withDevice({
-      width: { ideal: quality.width },
-      height: { ideal: quality.height },
-      frameRate: { ideal: quality.frameRate }
-    })
+    { ...ptz, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
+    { ...ptz },
+    { pan: true, tilt: true, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
+    { pan: true, tilt: true }
   ];
+  let stream = null;
   let lastError = null;
   for (const video of attempts) {
     try {
-      return await navigator.mediaDevices.getUserMedia({ audio: false, video });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+      break;
     } catch (err) {
       lastError = err;
       if (err.name !== "OverconstrainedError" && err.name !== "ConstraintNotSatisfiedError") throw err;
     }
   }
-  throw lastError || new Error("Could not start the camera.");
+  if (!stream) {
+    const video = {
+      width: { ideal: quality.width },
+      height: { ideal: quality.height },
+      frameRate: { ideal: quality.frameRate }
+    };
+    if (deviceId) video.deviceId = { exact: deviceId };
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+    } catch (err) {
+      throw lastError || err;
+    }
+  }
+  const liveTrack = stream.getVideoTracks()[0];
+  try {
+    await liveTrack.applyConstraints({
+      width: { ideal: quality.width },
+      height: { ideal: quality.height },
+      frameRate: { ideal: quality.frameRate }
+    });
+  } catch (err) {}
+  return stream;
 }
 
 async function refreshDevices() {
@@ -764,22 +780,38 @@ async function openStream(deviceId) {
   if (pose) {
     for (const axis of axes) {
       const cap = capability(axis);
-      if (pose[axis] == null || !controllable(cap)) continue;
+      if (pose[axis] == null || !axisAvailable(axis) || !cap) continue;
       if (axis === "zoom" && zoomLocked()) continue;
       target[axis] = clamp(pose[axis], cap.min, cap.max);
     }
     queuePtz({ pan: target.pan, tilt: target.tilt, zoom: zoomLocked() ? undefined : target.zoom });
   }
-  const caps = track.getCapabilities ? track.getCapabilities() : {};
-  const hasPanTilt = controllable(caps.pan) || controllable(caps.tilt);
-  const hasZoom = controllable(caps.zoom);
-  const hasPtz = hasPanTilt || hasZoom;
-  if (hasPtz) {
-    setStatus(lockedZoomHint(hasZoom));
-  } else {
-    setStatus("PIXY is open, but the browser did not get pan/tilt/zoom. Use Chrome or Edge, allow camera + PTZ when prompted, close EMEET Studio/Zoom/Teams, then stop and start again. Prefer 1080p 30.", true);
-  }
+  await reportPtzStatus();
   renderPose();
+}
+
+async function reportPtzStatus() {
+  const hasPanTilt = axisAvailable("pan") || axisAvailable("tilt");
+  const hasZoom = axisAvailable("zoom");
+  if (hasPanTilt || hasZoom) {
+    setStatus(lockedZoomHint(hasZoom));
+    return;
+  }
+  const perm = await ptzPermissionState();
+  const supports = navigator.mediaDevices.getSupportedConstraints?.() || {};
+  if (!supports.pan && !supports.tilt && !supports.zoom) {
+    setStatus("This browser cannot control camera pan/tilt/zoom. Open the page in Chrome or Edge on desktop.", true);
+    return;
+  }
+  if (perm === "denied") {
+    setStatus("PTZ is blocked for this site. Click the lock icon next to the URL → Site settings → Camera → allow, and turn on pan/tilt/zoom. Then stop and start again.", true);
+    return;
+  }
+  if (perm === "prompt") {
+    setStatus("Camera worked, but pan/tilt/zoom was not allowed yet. Stop the camera, click Start again, and choose Allow when Chrome asks to control pan and tilt.", true);
+    return;
+  }
+  setStatus("Camera is open, but Chrome did not expose pan/tilt/zoom for this PIXY. Close EMEET Studio/Zoom/Teams, unplug and replug USB, then check about://media-internals → Video Capture for “pan tilt” / “zoom”. Prefer 1080p 30.", true);
 }
 
 function lockedZoomHint(hasZoom) {
@@ -812,7 +844,7 @@ deviceSelect.addEventListener("change", () => {
 for (const axis of axes) {
   sliders[axis].addEventListener("input", () => {
     const cap = capability(axis);
-    if (!controllable(cap)) return;
+    if (!axisAvailable(axis) || !cap) return;
     target[axis] = clamp(Number(sliders[axis].value), cap.min, cap.max);
     queuePtz({ [axis]: target[axis] });
     renderPose();
@@ -840,8 +872,8 @@ frame.addEventListener("pointermove", (event) => {
   drag = { x: event.clientX, y: event.clientY };
   const pan = capability("pan");
   const tilt = capability("tilt");
-  if (controllable(pan)) offsetAxis("pan", dx * ((pan.max - pan.min) / rect.width));
-  if (controllable(tilt)) offsetAxis("tilt", -dy * ((tilt.max - tilt.min) / rect.height));
+  if (axisAvailable("pan") && pan) offsetAxis("pan", dx * ((pan.max - pan.min) / rect.width));
+  if (axisAvailable("tilt") && tilt) offsetAxis("tilt", -dy * ((tilt.max - tilt.min) / rect.height));
 });
 const endDrag = () => { drag = null; };
 frame.addEventListener("pointerup", endDrag);
